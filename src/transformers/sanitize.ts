@@ -44,44 +44,11 @@ export function sanitizeMdast(tree: Root): Root {
   visit(tree, "list", (node: List, index: number | undefined, parent: Parent | undefined) => {
     if (!parent || index === undefined) return;
     
-    const paragraphs: Paragraph[] = [];
-    
-    node.children.forEach((child, i) => {
-      if (child.type === "listItem") {
-        let prefix = node.ordered ? `${node.start! + i}. ` : "• ";
-        if (child.checked !== null && child.checked !== undefined) {
-             prefix = child.checked ? "✅ " : "⬜ ";
-        }
-        
-        // Find the first paragraph in the listItem and insert the prefix
-        visit(child, "paragraph", (pNode: Paragraph, pIdx, pParent) => {
-          if (pIdx === 0) {
-            pNode.children.unshift({ type: "text", value: prefix });
-          }
-        });
-        
-        // Flatten children to parent
-        // A list item usually contains paragraphs. We can just pull them up.
-        child.children.forEach(c => {
-          if (c.type === "paragraph") {
-            paragraphs.push(c);
-          } else {
-             // In case there's lists inside lists, recursive visitation handles it.
-             // We can just dump the block.
-             if (c.type !== "list") { // If it's a list, the child traversal will run into it later
-               paragraphs.push({ type: "paragraph", children: [{ type: "text", value: toString(c) }] });
-             } else {
-                 paragraphs.push({ type: "paragraph", children: [{ type: "text", value: "  " + toString(c) }]}); // very basic nested indent for unparsed yet
-                 // Realistically, to handle nested lists, we should keep track of depth, or transform bottom-up.
-             }
-          }
-        });
-      }
-    });
+    const paragraphs = flattenList(node, 0);
     
     // Replace the list with a list of paragraphs. Because parent.children is an array, we splice.
     parent.children.splice(index, 1, ...paragraphs);
-    // Returning index + paragraphs.length forces visit to skip the newly inserted nodes, preventing infinite loops.
+    // Returning index + paragraphs.length forces visit to skip the newly inserted nodes.
     return index + paragraphs.length;
   });
 
@@ -102,6 +69,45 @@ export function sanitizeMdast(tree: Root): Root {
   });
 
   return tree;
+}
+
+function flattenList(listNode: List, depth = 0): Paragraph[] {
+    const output: Paragraph[] = [];
+    const indent = "  ".repeat(depth);
+    
+    listNode.children.forEach((listItem, i) => {
+        const startIdx = listNode.start !== null && listNode.start !== undefined ? listNode.start : 1;
+        let prefix = listNode.ordered ? `${startIdx + i}. ` : "• ";
+        if (listItem.checked !== null && listItem.checked !== undefined) {
+            prefix = listItem.checked ? "✅ " : "⬜ ";
+        }
+        
+        let firstParagraphDone = false;
+
+        listItem.children.forEach(child => {
+            if (child.type === "list") {
+                output.push(...flattenList(child as List, depth + 1));
+            } else if (child.type === "paragraph") {
+                // Clone the paragraph so we don't mutate original tree unexpectedly if it's shared
+                const p: Paragraph = { ...child, children: [...child.children] } as Paragraph;
+                if (!firstParagraphDone) {
+                    p.children.unshift({ type: "text", value: indent + prefix });
+                    firstParagraphDone = true;
+                } else {
+                    p.children.unshift({ type: "text", value: indent + "  " });
+                }
+                output.push(p);
+            } else {
+                const p: Paragraph = { type: "paragraph", children: [{ type: "text", value: indent + "  " + toString(child) }] };
+                if (!firstParagraphDone) {
+                    (p.children[0] as Text).value = indent + prefix + toString(child);
+                    firstParagraphDone = true;
+                }
+                output.push(p);
+            }
+        });
+    });
+    return output;
 }
 
 function formatTable(table: Table): string {

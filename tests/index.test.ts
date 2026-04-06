@@ -28,6 +28,25 @@ describe("Markdown to Telegram - Entities", () => {
     expect(result.entities[0]).toMatchObject({ type: "bold", length: 1 });
   });
 
+  it("handles strictly nested lists with indentation and checkboxes", () => {
+    const md = `
+#### **1. Daily Goals**
+- **Morning**:
+  - [x] Drink water 💧
+  - [ ] Plan your day 📝
+- **Afternoon**:
+  - [ ] Focus on deep work
+`;
+    const result = getTelegramEntities(md);
+    
+    // Check line by line structure
+    expect(result.text).toContain("• **Morning**:");
+    expect(result.text).toContain("  ✅ Drink water 💧");
+    expect(result.text).toContain("  ⬜ Plan your day 📝");
+    expect(result.text).toContain("• **Afternoon**:");
+    expect(result.text).toContain("  ⬜ Focus on deep work");
+  });
+
   it("handles tables with monospace degradation", () => {
     const md = `
 | Header 1 | Header 2 |
