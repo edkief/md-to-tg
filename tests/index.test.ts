@@ -38,13 +38,21 @@ describe("Markdown to Telegram - Entities", () => {
   - [ ] Focus on deep work
 `;
     const result = getTelegramEntities(md);
-    
-    // Check line by line structure
-    expect(result.text).toContain("• **Morning**:");
+
+    // Markdown is stripped to plain text; emphasis becomes bold entities.
+    expect(result.text).toContain("• Morning:");
     expect(result.text).toContain("  ✅ Drink water 💧");
     expect(result.text).toContain("  ⬜ Plan your day 📝");
-    expect(result.text).toContain("• **Afternoon**:");
+    expect(result.text).toContain("• Afternoon:");
     expect(result.text).toContain("  ⬜ Focus on deep work");
+
+    // The bold labels are preserved as entities over the stripped text.
+    for (const label of ["Morning", "Afternoon"]) {
+      const bold = result.entities.find(
+        e => e.type === "bold" && result.text.slice(e.offset, e.offset + e.length) === label
+      );
+      expect(bold, `bold entity for "${label}"`).toBeDefined();
+    }
   });
 
   it("handles tables with monospace degradation", () => {
